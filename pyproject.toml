@@ -1,5 +1,5 @@
 [project]
-name = "sshm"
+name = "sshmd"
 version = "0.1.0"
 description = "Cross-platform SSH session manager with a background daemon"
 readme = "README.md"
@@ -29,6 +29,10 @@ sshmd = "sshm.daemon:main"
 [build-system]
 requires = ["uv_build>=0.10.6,<0.12.0"]
 build-backend = "uv_build"
+
+# The distribution is published as `sshmd`, but the import package is `sshm`.
+[tool.uv.build-backend]
+module-name = "sshm"
 
 [dependency-groups]
 dev = [
