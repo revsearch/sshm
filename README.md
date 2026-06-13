@@ -132,6 +132,7 @@ sshm l servers.json                     # Preview a JSON file
 sshm import servers.json                # Import (skip existing)
 sshm import servers.json -o             # Import (override existing)
 sshm import servers.json web db         # Import only specific hosts
+sshm import servers.json web=prod       # Import 'web' under the alias 'prod'
 ```
 
 ### Daemon

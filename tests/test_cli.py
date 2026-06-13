@@ -1,7 +1,16 @@
+import json
+
 import pytest
 from click.testing import CliRunner
 
-from sshm.cli import _format_uptime, _parse_port_args, _parse_target, _read_hosts_file, main
+from sshm.cli import (
+    _format_uptime,
+    _parse_import_names,
+    _parse_port_args,
+    _parse_target,
+    _read_hosts_file,
+    main,
+)
 
 
 def test_help_runs():
@@ -106,3 +115,45 @@ def test_export_to_unwritable_path_errors(monkeypatch, tmp_path):
 def test_port_without_action_gives_usage_error():
     result = CliRunner().invoke(main, ["port", "web"])  # no add/remove
     assert result.exit_code != 0 and "needs an action" in result.output
+
+
+def test_parse_import_names():
+    assert _parse_import_names(()) == {}
+    assert _parse_import_names(("web", "db")) == {"web": "web", "db": "db"}
+    assert _parse_import_names(("web=prod", "db")) == {"web": "prod", "db": "db"}
+
+
+@pytest.mark.parametrize("bad", ["=prod", "web="])
+def test_parse_import_names_invalid(bad):
+    with pytest.raises(SystemExit):
+        _parse_import_names((bad,))
+
+
+def test_import_renames_host_and_its_managed_key(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    export = tmp_path / "hosts.json"
+    export.write_text(
+        json.dumps({"hosts": [{
+            "alias": "web", "hostname": "1.2.3.4", "user": "root", "port": 2222,
+            "identity_file": "~/.ssh/sshm_web", "private_key": "PRIV", "public_key": "PUB",
+            "port_forwards": ["L:8080:localhost:80"],
+        }]}),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(main, ["import", str(export), "web=prod"])
+    assert result.exit_code == 0, result.output
+
+    from sshm.config import find_entry
+
+    assert find_entry("web") is None  # not imported under the old name
+    e = find_entry("prod")
+    assert e is not None
+    assert e.hostname == "1.2.3.4" and e.port == 2222
+    assert e.identity_file == "~/.ssh/sshm_prod"  # key reference retargeted
+    assert [pf.to_str() for pf in e.port_forwards] == ["L:8080:localhost:80"]
+
+    ssh = tmp_path / ".ssh"
+    assert (ssh / "sshm_prod").read_text() == "PRIV"  # key written under the new name
+    assert (ssh / "sshm_prod.pub").read_text() == "PUB"
