@@ -271,3 +271,24 @@ def test_required_helper():
     assert _required({"a": 1, "b": 2}, "a", "b") == [1, 2]
     with pytest.raises(ValueError):
         _required({"a": 1}, "a", "b")
+
+
+def test_rebuild_alias_sessions(daemon):
+    daemon.pm.sessions_list = [
+        FakeSession("web", "web-1"), FakeSession("web", "web-2"), FakeSession("db", "db-1"),
+    ]
+    daemon._rebuild_alias_sessions("web")
+    rebuilt = [c for c in daemon.pm.calls if c[0] == "rebuild_session"]
+    assert rebuilt == [("rebuild_session", "web", "web-1"), ("rebuild_session", "web", "web-2")]
+
+
+def test_ensure_enabled_sessions(daemon, monkeypatch):
+    entries = [
+        HostEntry(alias="web", enabled=True),
+        HostEntry(alias="db", enabled=False),
+        HostEntry(alias="*", enabled=True),  # wildcard must be skipped
+    ]
+    _stub_config(monkeypatch, load_entries=lambda: entries)
+    daemon._ensure_enabled_sessions()
+    ensured = [c[1] for c in daemon.pm.calls if c[0] == "ensure_unattached"]
+    assert ensured == ["web"]
