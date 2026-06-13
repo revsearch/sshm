@@ -96,7 +96,10 @@ def _apply_option(entry: HostEntry, key: str, val: str) -> None:
     elif key_lower == "user":
         entry.user = val
     elif key_lower == "port":
-        entry.port = int(val)
+        try:
+            entry.port = int(val)
+        except ValueError:
+            entry.extra_options.append((key, val))  # malformed Port → keep verbatim, don't crash the parse
     elif key_lower == "identityfile":
         # Keep the first IdentityFile as the primary (what sshm reads/writes);
         # preserve any extras as raw options so regeneration doesn't drop them.
@@ -119,7 +122,10 @@ def parse_ssh_config(path: Path | None = None) -> tuple[list[str], list[HostEntr
     if not path.exists():
         return [], []
 
-    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    # surrogateescape: a config with non-UTF-8 bytes (a comment in another
+    # encoding, etc.) must not crash the parse or the watchdog that calls it; the
+    # bytes round-trip losslessly because write_ssh_config uses it too.
+    lines = path.read_text(encoding="utf-8", errors="surrogateescape").splitlines(keepends=True)
 
     preamble: list[str] = []
     entries: list[HostEntry] = []
@@ -177,14 +183,20 @@ def write_ssh_config(
     path = path or ssh_config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    if path.exists():
-        shutil.copy2(path, path.with_name(path.name + ".bak"))
+    # If ~/.ssh/config is a symlink (dotfile managers point it at a tracked file),
+    # write through to the real target so os.replace swaps the file rather than
+    # replacing the link with a regular file and orphaning the target.
+    target = path.resolve() if path.is_symlink() else path
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    if target.exists():
+        shutil.copy2(target, target.with_name(target.name + ".bak"))
 
     # Write to a temp file in the same directory, then atomically replace, so a
     # crash mid-write can never leave a truncated ~/.ssh/config behind.
-    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
+    fd, tmp_name = tempfile.mkstemp(dir=target.parent, prefix=target.name + ".", suffix=".tmp")
     try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="", errors="surrogateescape") as f:
             for line in preamble:
                 f.write(line if line.endswith("\n") else line + "\n")
 
@@ -198,8 +210,10 @@ def write_ssh_config(
                         f.write(line if line.endswith("\n") else line + "\n")
                 else:
                     f.write(f"Host {entry.alias}\n")
-                    f.write(f"    HostName {entry.hostname}\n")
-                    f.write(f"    User {entry.user}\n")
+                    if entry.hostname:
+                        f.write(f"    HostName {entry.hostname}\n")
+                    if entry.user:
+                        f.write(f"    User {entry.user}\n")
                     if entry.port != 22:
                         f.write(f"    Port {entry.port}\n")
                     if entry.identity_file:
@@ -215,9 +229,9 @@ def write_ssh_config(
         os.unlink(tmp_name)
         raise
 
-    if path.exists():
-        shutil.copymode(path, tmp_name)
-    os.replace(tmp_name, path)
+    if target.exists():
+        shutil.copymode(target, tmp_name)
+    os.replace(tmp_name, target)
 
 
 def load_entries(path: Path | None = None) -> list[HostEntry]:

@@ -233,3 +233,48 @@ def test_backup_created_on_rewrite(cfg):
     add_host("a", "1.1.1.1", "root", 22, None, cfg)
     add_host("b", "2.2.2.2", "root", 22, None, cfg)
     assert cfg.with_name(cfg.name + ".bak").exists()
+
+
+def test_malformed_port_does_not_crash_parse(cfg):
+    cfg.write_text(
+        "Host web\n    HostName 1.2.3.4\n    User root\n    Port not-a-number\n",
+        encoding="utf-8",
+    )
+    e = find_entry("web", cfg)  # must not raise
+    assert e is not None and e.port == 22  # default kept
+    assert ("Port", "not-a-number") in e.extra_options
+    # and it survives a rewrite verbatim
+    add_host("db", "5.6.7.8", "root", 22, None, cfg)
+    assert "Port not-a-number" in cfg.read_text(encoding="utf-8")
+
+
+def test_non_utf8_config_does_not_crash_and_roundtrips(cfg):
+    cfg.write_bytes(
+        b"# caf\xe9 (latin-1)\nHost web\n    HostName 1.2.3.4\n    User root\n"
+    )
+    e = find_entry("web", cfg)  # must not raise UnicodeDecodeError
+    assert e is not None and e.hostname == "1.2.3.4"
+    add_host("db", "5.6.7.8", "root", 22, None, cfg)  # rewrite
+    assert b"caf\xe9" in cfg.read_bytes()  # non-UTF-8 byte preserved
+
+
+def test_write_through_symlinked_config(tmp_path):
+    real = tmp_path / "real_config"
+    link = tmp_path / "config"
+    real.write_text("", encoding="utf-8")
+    link.symlink_to(real)
+
+    add_host("web", "1.2.3.4", "root", 22, None, link)
+
+    assert link.is_symlink()  # the link is preserved, not replaced by a file
+    assert link.resolve() == real
+    assert "Host web" in real.read_text(encoding="utf-8")  # the real target was updated
+
+
+def test_regenerated_stanza_omits_empty_hostname_and_user(cfg):
+    add_host("web", "", "", 22, None, cfg)  # no hostname/user
+    # rename forces regeneration (_raw_lines cleared)
+    rename_host("web", "prod", cfg)
+    text = cfg.read_text(encoding="utf-8")
+    assert "HostName" not in text and "User" not in text  # no empty directives emitted
+    assert "Host prod" in text
