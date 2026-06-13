@@ -1,6 +1,6 @@
 # sshm
 
-[![CI](https://github.com/revsearch/sshm/actions/workflows/ci.yml/badge.svg)](https://github.com/revsearch/sshm/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/sshmd)](https://pypi.org/project/sshmd/) [![Tests](https://github.com/revsearch/sshm/actions/workflows/tests.yml/badge.svg)](https://github.com/revsearch/sshm/actions/workflows/tests.yml)
 
 An SSH session manager with a background daemon. Remote shells stay alive when you
 close the terminal, reconnect on their own when the link drops, and reattach
@@ -17,16 +17,19 @@ ssh prod                        # plain ssh/scp/rsync work too — same alias & 
 
 ## Install
 
-With [uv](https://docs.astral.sh/uv/):
+The package is published as **`sshmd`** and installs the `sshm` (and `sshmd`)
+commands. With [uv](https://docs.astral.sh/uv/) or [pipx](https://pipx.pypa.io/):
+
+```bash
+uv tool install sshmd
+# or
+pipx install sshmd
+```
+
+Latest from git instead of PyPI:
 
 ```bash
 uv tool install git+https://github.com/revsearch/sshm
-```
-
-Or with [pipx](https://pipx.pypa.io/):
-
-```bash
-pipx install git+https://github.com/revsearch/sshm
 ```
 
 From a checkout:
@@ -280,3 +283,7 @@ icacls "$env:USERPROFILE\.ssh\config" /grant:r "$($env:USERNAME):(F)"
 
 If `takeown` fails, run PowerShell as Administrator and repeat. Verify with
 `icacls "$env:USERPROFILE\.ssh\config"` — only your user with `(F)` should remain.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

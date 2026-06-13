@@ -4,6 +4,8 @@ version = "0.1.0"
 description = "Cross-platform SSH session manager with a background daemon"
 readme = "README.md"
 requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
 keywords = ["ssh", "session-manager", "daemon", "port-forwarding", "socks", "terminal"]
 classifiers = [
     "Environment :: Console",
