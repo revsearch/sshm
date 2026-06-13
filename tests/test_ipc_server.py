@@ -108,3 +108,26 @@ def test_send_request_connection_refused(isolated):
 
 def test_is_daemon_running_without_pidfile(isolated):
     assert is_daemon_running() is False
+
+
+def test_ensure_daemon_spawns_then_returns_when_responsive(isolated, monkeypatch):
+    from sshm.state import write_token
+
+    monkeypatch.setattr(ipc, "is_daemon_running", lambda: False)  # nothing running yet
+    spawned = {}
+    monkeypatch.setattr(ipc.subprocess, "Popen", lambda *a, **k: spawned.update(ok=True))
+    monkeypatch.setattr(ipc.time, "sleep", lambda _s: None)
+    write_token("tok")  # the "spawned" daemon's token file appears
+    monkeypatch.setattr(ipc, "send_request", lambda *a, **k: {"ok": True})
+
+    ipc.ensure_daemon()  # spawns, polls, sees a healthy status → returns
+    assert spawned == {"ok": True}
+
+
+def test_ensure_daemon_raises_if_never_responds(isolated, monkeypatch):
+    monkeypatch.setattr(ipc, "is_daemon_running", lambda: False)
+    monkeypatch.setattr(ipc.subprocess, "Popen", lambda *a, **k: None)
+    monkeypatch.setattr(ipc.time, "sleep", lambda _s: None)
+    # no token file ever appears → all 30 polls miss → RuntimeError
+    with pytest.raises(RuntimeError):
+        ipc.ensure_daemon()
