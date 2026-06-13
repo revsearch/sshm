@@ -212,6 +212,8 @@ attached with — full-screen apps (`vim`, `htop`) won't follow later resizes.
 
 ## Development
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full branch / commit / PR workflow.
+
 ```bash
 uv sync           # install dependencies (including the dev group)
 uv run pytest     # run the tests
