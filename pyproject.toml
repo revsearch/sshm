@@ -1,0 +1,39 @@
+[project]
+name = "sshm"
+version = "0.1.0"
+description = "Cross-platform SSH session manager with a background daemon"
+readme = "README.md"
+requires-python = ">=3.12"
+keywords = ["ssh", "session-manager", "daemon", "port-forwarding", "socks", "terminal"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: System Administrators",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: System :: Networking",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "click>=8.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/revsearch/sshm"
+Repository = "https://github.com/revsearch/sshm"
+Issues = "https://github.com/revsearch/sshm/issues"
+
+[project.scripts]
+sshm = "sshm.cli:main"
+sshmd = "sshm.daemon:main"
+
+[build-system]
+requires = ["uv_build>=0.10.6,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
