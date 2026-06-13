@@ -113,7 +113,7 @@ class AliasedGroup(click.Group):
 
         formatter.write("Import/Export:\n")
         formatter.write("  export <file> [names]                        Export hosts + keys\n")
-        formatter.write("  import <file> [-o] [names]                   Import hosts + keys\n")
+        formatter.write("  import <file> [-o] [name|name=new]            Import hosts + keys\n")
         formatter.write("  l,  list <file.json>                         Preview JSON file\n")
         formatter.write("\n")
 
@@ -595,28 +595,35 @@ def export_cmd(filepath: str, names: tuple[str, ...]):
 @click.option("-o", "--override", is_flag=True, help="Override existing hosts")
 @click.argument("names", nargs=-1)
 def import_cmd(filepath: str, override: bool, names: tuple[str, ...]):
-    """Import hosts from JSON."""
+    """Import hosts from JSON. A name may be `<json-alias>=<new-alias>` to rename."""
     from .config import PortForward, add_host, add_port_forward, find_entry, remove_host, ssh_config_path
 
+    rename = _parse_import_names(names)  # {json_alias: target_alias}; empty → import all
     hosts = _read_hosts_file(filepath)
-    if names:
-        hosts = [h for h in hosts if h["alias"] in names]
+    if rename:
+        hosts = [h for h in hosts if h["alias"] in rename]
 
     imported = 0
     skipped = 0
     for h in hosts:
-        alias = h["alias"]
+        src_alias = h["alias"]
+        alias = rename.get(src_alias, src_alias)  # target alias (renamed or as-is)
         existing = find_entry(alias)
+        label = f"{src_alias} -> {alias}" if alias != src_alias else alias
 
         if existing and not override:
-            click.echo(f"  skip  {alias} (already exists, use -o to override)")
+            click.echo(f"  skip  {label} (already exists, use -o to override)")
             skipped += 1
             continue
 
         if existing:
             remove_host(alias)
 
+        # If the export's key is the managed ~/.ssh/sshm_<src>, retarget it to the
+        # new alias so the renamed host gets its own sshm_<new> key (like rename).
         identity = h.get("identity_file")
+        if alias != src_alias and identity == f"~/.ssh/sshm_{src_alias}":
+            identity = f"~/.ssh/sshm_{alias}"
         if identity and h.get("private_key"):
             _write_key_files(identity, h, override)
 
@@ -635,10 +642,26 @@ def import_cmd(filepath: str, override: bool, names: tuple[str, ...]):
             except Exception:
                 pass
 
-        click.echo(f"  {'update' if existing else 'add':>6}  {alias}")
+        click.echo(f"  {'update' if existing else 'add':>6}  {label}")
         imported += 1
 
     click.echo(f"\nImported {imported}, skipped {skipped}")
+
+
+def _parse_import_names(names: tuple[str, ...]) -> dict[str, str]:
+    """Parse import selectors into {json_alias: target_alias}.
+
+    Each name is either `<alias>` (import as-is) or `<alias>=<new-alias>` (import
+    that host under a new alias). An empty tuple means "import everything".
+    """
+    mapping: dict[str, str] = {}
+    for n in names:
+        src, sep, dst = n.partition("=")
+        if sep and not (src and dst):
+            click.echo(f"Error: invalid selector '{n}', expected <name> or <name>=<new-name>", err=True)
+            sys.exit(1)
+        mapping[src] = dst if sep else src
+    return mapping
 
 
 def _write_key_files(identity: str, host: dict, override: bool) -> None:
