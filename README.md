@@ -1,6 +1,6 @@
 # sshm
 
-[![PyPI](https://img.shields.io/pypi/v/sshmd)](https://pypi.org/project/sshmd/) [![Tests](https://github.com/revsearch/sshm/actions/workflows/tests.yml/badge.svg)](https://github.com/revsearch/sshm/actions/workflows/tests.yml)
+[![PyPI](https://img.shields.io/pypi/v/sshmd?v=0.1.0)](https://pypi.org/project/sshmd/) [![Tests](https://github.com/revsearch/sshm/actions/workflows/tests.yml/badge.svg)](https://github.com/revsearch/sshm/actions/workflows/tests.yml)
 
 An SSH session manager with a background daemon. Remote shells stay alive when you
 close the terminal, reconnect on their own when the link drops, and reattach
