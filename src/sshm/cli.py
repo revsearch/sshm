@@ -58,7 +58,7 @@ class AliasedGroup(click.Group):
     }
 
     def resolve_command(self, ctx, args):
-        if args and len(args) > 1:
+        if args:
             for prefixes, (add_name, remove_name) in self.PREFIX_COMMANDS.items():
                 if args[0] not in prefixes:
                     continue
@@ -70,6 +70,14 @@ class AliasedGroup(click.Group):
                     elif rest[i] in ("remove", "r", "rm"):
                         rest.pop(i)
                         return super().resolve_command(ctx, [remove_name] + rest)
+                # A prefix command (port) with no add/remove action: fail with a
+                # usage hint instead of silently falling through to `connect`,
+                # which would report a baffling "Unknown alias: port".
+                if not ctx.resilient_parsing:
+                    ctx.fail(
+                        f"'{args[0]}' needs an action: a|add or r|remove "
+                        f"(e.g. sshm port <alias> a -L 8080:localhost:80)"
+                    )
                 break
 
         # "sshm <alias>" → "sshm connect <alias>" if not a known command
@@ -204,8 +212,16 @@ def _read_hosts_file(filepath: str) -> list[dict]:
     if not p.exists():
         click.echo(f"Error: file not found: {filepath}", err=True)
         sys.exit(1)
-    data = json.loads(p.read_text(encoding="utf-8"))
-    return data.get("hosts", [])
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        click.echo(f"Error: cannot read {filepath}: {e}", err=True)
+        sys.exit(1)
+    if not isinstance(data, dict) or not isinstance(data.get("hosts"), list):
+        click.echo(f"Error: {filepath} is not a valid sshm export (no 'hosts' list)", err=True)
+        sys.exit(1)
+    # Keep only well-formed host objects that at least carry an alias.
+    return [h for h in data["hosts"] if isinstance(h, dict) and h.get("alias")]
 
 
 # --- connect (attach) ---
@@ -286,6 +302,12 @@ def _parse_target(target: str) -> tuple[str, str, int]:
 
     user, host_part = target.split("@", 1)
 
+    def _ok(hostname: str, port: int) -> tuple[str, str, int]:
+        if not user or not hostname:
+            click.echo(f"Error: target must be user@host[:port], got '{target}'", err=True)
+            sys.exit(1)
+        return user, hostname, port
+
     if host_part.startswith("["):  # bracketed IPv6, optional :port after the ]
         end = host_part.find("]")
         if end == -1:
@@ -294,9 +316,9 @@ def _parse_target(target: str) -> tuple[str, str, int]:
         hostname = host_part[1:end]
         rest = host_part[end + 1:]
         if rest.startswith(":"):
-            return user, hostname, _parse_port(rest[1:])
+            return _ok(hostname, _parse_port(rest[1:]))
         if rest == "":
-            return user, hostname, 22
+            return _ok(hostname, 22)
         click.echo(f"Error: unexpected '{rest}' after IPv6 address", err=True)
         sys.exit(1)
 
@@ -304,8 +326,8 @@ def _parse_target(target: str) -> tuple[str, str, int]:
     # the last colon as the host/port separator.
     if host_part.count(":") == 1:
         hostname, port_str = host_part.rsplit(":", 1)
-        return user, hostname, _parse_port(port_str)
-    return user, host_part, 22
+        return _ok(hostname, _parse_port(port_str))
+    return _ok(host_part, 22)
 
 
 def _ensure_key(alias: str) -> Path:
@@ -557,10 +579,14 @@ def export_cmd(filepath: str, names: tuple[str, ...]):
                 h["public_key"] = pub_path.read_text(encoding="utf-8")
         hosts.append(h)
 
-    Path(filepath).write_text(
-        json.dumps({"hosts": hosts}, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    try:
+        Path(filepath).write_text(
+            json.dumps({"hosts": hosts}, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except OSError as e:
+        click.echo(f"Error: cannot write {filepath}: {e}", err=True)
+        sys.exit(1)
     click.echo(f"Exported {len(hosts)} host(s) to {filepath}")
 
 
@@ -596,7 +622,7 @@ def import_cmd(filepath: str, override: bool, names: tuple[str, ...]):
 
         add_host(
             alias=alias,
-            hostname=h["hostname"],
+            hostname=h.get("hostname", ""),
             user=h.get("user", "root"),
             port=h.get("port", 22),
             identity_file=identity,

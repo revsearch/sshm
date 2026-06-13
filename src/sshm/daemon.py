@@ -116,15 +116,22 @@ class Daemon:
         if not session:
             return protocol.err(f"No available session for '{alias}'")
 
-        # Size the remote terminal to the attaching client before streaming starts
-        cols, rows = req.get("cols"), req.get("rows")
-        if cols and rows:
-            session.set_winsize(int(cols), int(rows))
+        # attach() has now RESERVED the session (attached=True). If anything below
+        # raises (e.g. a bogus cols/rows), release the reservation so the session
+        # isn't leaked out of the attachable pool.
+        try:
+            # Size the remote terminal to the attaching client before streaming starts
+            cols, rows = req.get("cols"), req.get("rows")
+            if cols and rows:
+                session.set_winsize(int(cols), int(rows))
 
-        # The IPC server bridges this connection after sending the response
-        return StreamingResponse(
-            protocol.ok(session.to_dict()), session, cli_pid=req.get("cli_pid")
-        )
+            # The IPC server bridges this connection after sending the response
+            return StreamingResponse(
+                protocol.ok(session.to_dict()), session, cli_pid=req.get("cli_pid")
+            )
+        except Exception:
+            session.detach()
+            raise
 
     def _cmd_resize(self, req: dict[str, Any]):
         alias, name, cols, rows = _required(req, "alias", "name", "cols", "rows")

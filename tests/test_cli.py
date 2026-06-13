@@ -1,7 +1,7 @@
 import pytest
 from click.testing import CliRunner
 
-from sshm.cli import _format_uptime, _parse_port_args, _parse_target, main
+from sshm.cli import _format_uptime, _parse_port_args, _parse_target, _read_hosts_file, main
 
 
 def test_help_runs():
@@ -67,8 +67,42 @@ def test_parse_target_bare_ipv6_no_port():
 
 @pytest.mark.parametrize(
     "bad",
-    ["nohost", "root@host:notaport", "root@host:0", "root@host:99999", "root@[::1", "root@[::1]x"],
+    [
+        "nohost", "root@host:notaport", "root@host:0", "root@host:99999",
+        "root@[::1", "root@[::1]x",
+        "@host", "root@", "root@:22", "@",  # empty user or hostname
+    ],
 )
 def test_parse_target_invalid(bad):
     with pytest.raises(SystemExit):
         _parse_target(bad)
+
+
+def test_read_hosts_file_rejects_malformed(tmp_path):
+    bad = tmp_path / "bad.json"
+    bad.write_text("{ not json", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        _read_hosts_file(str(bad))
+
+    arr = tmp_path / "arr.json"
+    arr.write_text("[1, 2, 3]", encoding="utf-8")  # valid JSON, wrong shape
+    with pytest.raises(SystemExit):
+        _read_hosts_file(str(arr))
+
+
+def test_read_hosts_file_filters_bad_entries(tmp_path):
+    f = tmp_path / "hosts.json"
+    f.write_text('{"hosts": [{"alias": "web"}, {"no": "alias"}, "junk"]}', encoding="utf-8")
+    assert _read_hosts_file(str(f)) == [{"alias": "web"}]
+
+
+def test_export_to_unwritable_path_errors(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    result = CliRunner().invoke(main, ["export", str(tmp_path / "missing-dir" / "x.json")])
+    assert result.exit_code == 1 and "cannot write" in result.output.lower()
+
+
+def test_port_without_action_gives_usage_error():
+    result = CliRunner().invoke(main, ["port", "web"])  # no add/remove
+    assert result.exit_code != 0 and "needs an action" in result.output
