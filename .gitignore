@@ -14,3 +14,8 @@ wheels/
 
 # Claude Code local config
 .claude/
+
+# Coverage
+.coverage
+coverage.xml
+htmlcov/
