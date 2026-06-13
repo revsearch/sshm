@@ -50,9 +50,9 @@ class AliasedGroup(click.Group):
         return super().get_command(ctx, cmd_name)
 
     # Prefix groups with flexible add/remove syntax:
-    #   sshm po a <alias> -L ...      → port-add
-    #   sshm po <alias> a -L ...      → port-add <alias> ...
-    #   sshm po a <alias> -D <port>   → port-add (SOCKS proxy)
+    #   sshm p a <alias> -L ...      → port-add
+    #   sshm p <alias> a -L ...      → port-add <alias> ...
+    #   sshm p a <alias> -D <port>   → port-add (SOCKS proxy)
     PREFIX_COMMANDS: ClassVar[dict[tuple[str, ...], tuple[str, str]]] = {
         ("port", "po", "p"): ("port-add", "port-remove"),
     }
@@ -94,8 +94,8 @@ class AliasedGroup(click.Group):
         formatter.write("\n")
 
         formatter.write("Forwarding:\n")
-        formatter.write("  po, port <alias> a|r -L|-R <local>:<host>:<remote>   Port forward\n")
-        formatter.write("  po, port <alias> a|r -D <port>                       SOCKS proxy (ssh -D)\n")
+        formatter.write("  p,  port <alias> a|r -L|-R <local>:<host>:<remote>   Port forward\n")
+        formatter.write("  p,  port <alias> a|r -D <port>                       SOCKS proxy (ssh -D)\n")
         formatter.write("\n")
 
         formatter.write("Auto-connect:\n")
