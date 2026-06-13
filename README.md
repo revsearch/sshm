@@ -11,6 +11,8 @@ keep working alongside it.
 sshm add prod root@192.0.2.10   # keygen + copy key + write ~/.ssh/config
 sshm prod                       # attach to a live shell (or start one)
 # close the terminal — the shell keeps running; `sshm prod` reattaches it
+
+ssh prod                        # plain ssh/scp/rsync work too — same alias & key
 ```
 
 ## Install
@@ -51,6 +53,26 @@ sshm myserver
 # Or explicitly
 sshm c myserver
 ```
+
+## Works with `ssh`, `scp`, `rsync`
+
+`sshm add` writes a normal `Host` entry to `~/.ssh/config`, so the alias works with
+any tool that reads it — not just `sshm`. The generated key and port are picked up
+automatically, so no `-i`/`-p` flags are needed:
+
+```bash
+ssh myserver                            # plain SSH, same alias
+ssh myserver htop                       # run a one-off command
+scp ./backup.tar.gz myserver:/srv/      # copy a file up
+scp myserver:/var/log/app.log .         # ...and back down
+rsync -avz ./site/ myserver:/var/www/   # sync a directory
+sftp myserver                           # sftp, git over ssh, etc. all work too
+git clone myserver:/srv/repo.git        # alias works as the ssh host anywhere
+```
+
+The difference: `sshm myserver` attaches to a persistent, auto-reconnecting shell
+via the daemon, while `ssh myserver` is a plain one-off connection — both to the
+same host, using the same key and config.
 
 ## Commands
 
