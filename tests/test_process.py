@@ -59,6 +59,14 @@ def test_session_set_winsize_remembers_without_master():
     assert s.last_winsize == (90, 25)
 
 
+def test_set_winsize_clamps_to_uint16():
+    from sshm.process import SshSession
+
+    s = SshSession(alias="x", name="x-1")
+    s.set_winsize(99999, -5)  # out of struct's unsigned-16-bit range
+    assert s.last_winsize == (0xFFFF, 0)  # clamped, no struct.error
+
+
 @posix_only
 def test_adopt_reconnect_resets_scrollback_keeps_size_and_closes_old_fd():
     import time

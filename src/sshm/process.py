@@ -162,6 +162,10 @@ class SshSession:
 
     def set_winsize(self, cols: int, rows: int) -> None:
         """Resize the remote terminal (ssh gets SIGWINCH from the master)."""
+        # struct winsize fields are unsigned 16-bit; clamp so a bogus size can't
+        # raise struct.error out of the ioctl pack.
+        cols = max(0, min(cols, 0xFFFF))
+        rows = max(0, min(rows, 0xFFFF))
         with self._lock:
             self.last_winsize = (cols, rows)
             fd = self.master_fd

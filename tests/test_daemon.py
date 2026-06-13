@@ -24,6 +24,7 @@ class FakeSession:
 
     def detach(self):
         self.detached = True
+        self.attached = False
 
 
 class FakePM:
@@ -140,6 +141,16 @@ def test_attach_no_available_session(daemon, monkeypatch):
     _stub_config(monkeypatch, find_entry=lambda a, *args, **kw: object())
     resp = daemon._cmd_attach({"alias": "web"})  # FakePM has no sessions
     assert resp == protocol.err("No available session for 'web'")
+
+
+def test_attach_releases_reservation_on_bad_winsize(daemon, monkeypatch):
+    _stub_config(monkeypatch, find_entry=lambda a, *args, **kw: object())
+    daemon.pm.sessions_list = [FakeSession("web", "web-1")]
+    s = daemon.pm.sessions_list[0]
+    # cols="abc" makes int() raise inside the handler, after attach() reserved s.
+    resp = daemon.handle_request({"cmd": protocol.CMD_ATTACH, "alias": "web", "cols": "abc", "rows": 24})
+    assert resp["ok"] is False
+    assert s.detached and not s.attached  # reservation released, not leaked
 
 
 def test_resize_found_and_missing(daemon):
