@@ -5,8 +5,10 @@ from sshm.state import DEFAULT_PORT, resolve_port, write_port
 
 @pytest.fixture(autouse=True)
 def fake_home(monkeypatch, tmp_path):
-    # state.sshm_dir() is derived from Path.home(); isolate it per test.
+    # state.sshm_dir() is derived from Path.home(); isolate it per test. HOME is
+    # what POSIX uses; Windows' Path.home() reads USERPROFILE, so set both.
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     monkeypatch.delenv("SSHM_PORT", raising=False)
     return tmp_path
 
