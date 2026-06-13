@@ -1,5 +1,7 @@
 # sshm
 
+[![CI](https://github.com/revsearch/sshm/actions/workflows/ci.yml/badge.svg)](https://github.com/revsearch/sshm/actions/workflows/ci.yml)
+
 An SSH session manager with a background daemon. Remote shells stay alive when you
 close the terminal, reconnect on their own when the link drops, and reattach
 instantly. State is kept in plain `~/.ssh/config`, so `ssh`, `scp`, and `rsync`
