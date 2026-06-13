@@ -248,13 +248,21 @@ class SshSession:
                     self.scrollback.extend(data)
                     if len(self.scrollback) > SCROLLBACK_MAX:
                         del self.scrollback[:-SCROLLBACK_MAX]
-
                     sock = self._active_socket
-                    if sock:
-                        try:
-                            sock.sendall(data)
-                        except OSError:
-                            self._active_socket = None
+
+                # Send to the client OUTSIDE the lock. A stalled or flow-controlled
+                # client (Ctrl-S, a suspended `sshm attach`, a full TCP window) makes
+                # this blocking send hang; holding _lock here would wedge detach,
+                # _kill, set_winsize and _write_input (all need the lock) — and detach
+                # closing the socket, the very thing that would unblock us, couldn't
+                # run. Detaching/closing the socket from elsewhere unblocks the send.
+                if sock is not None:
+                    try:
+                        sock.sendall(data)
+                    except OSError:
+                        with self._lock:
+                            if self._active_socket is sock:
+                                self._active_socket = None
 
             log.info("Reader thread ended for %s/%s", self.alias, self.name)
 
@@ -278,14 +286,20 @@ class SshSession:
         with self._lock:
             self.attached = True
             self.attached_pid = cli_pid
-            # Replay scrollback so the client sees recent output immediately
-            if self.scrollback:
-                try:
-                    conn.sendall(bytes(self.scrollback))
-                except OSError:
-                    self.attached = False
-                    self.attached_pid = None
-                    return
+            # Snapshot scrollback to replay. Leave _active_socket unset for now so
+            # the reader doesn't stream live output until the replay has been sent.
+            replay = bytes(self.scrollback)
+
+        # Replay outside the lock — like the reader's send, a blocking sendall to a
+        # stalled client must not hold the session lock. Output produced during the
+        # replay stays in scrollback (it just isn't shown live to this attach).
+        if replay:
+            try:
+                conn.sendall(replay)
+            except OSError:
+                self.detach()
+                return
+        with self._lock:
             self._active_socket = conn
 
         # Socket → SSH input (PTY master, or stdin pipe on Windows)

@@ -108,3 +108,50 @@ def test_write_input_returns_false_without_io():
 
     s = SshSession(alias="x", name="x-1")  # no master_fd, no process
     assert s._write_input(b"data") is False
+
+
+@posix_only
+def test_detach_not_blocked_by_stalled_client_send():
+    # Regression: the reader must not hold the session lock while sending to the
+    # client. A stalled client (here a socket whose sendall blocks until close)
+    # would otherwise wedge detach/kill/resize/write on the lock.
+    import threading
+
+    from sshm.process import SshSession, _spawn_with_pty
+
+    reached_send = threading.Event()
+    release = threading.Event()
+
+    class StalledSock:
+        def sendall(self, data):
+            reached_send.set()
+            release.wait(5)  # behaves like a full TCP window: blocks until closed
+            raise OSError("closed")
+
+        def close(self):
+            release.set()
+
+    s = SshSession(alias="t", name="t-1")
+    proc, master = _spawn_with_pty(["cat"])
+    s.adopt_process(proc, master)
+    with s._lock:
+        s._active_socket = StalledSock()
+    try:
+        s._write_input(b"ping\n")  # cat echoes → reader calls sendall → blocks
+        assert reached_send.wait(3), "reader never reached sendall"
+
+        # Reader is blocked in sendall; detach() must still complete promptly.
+        done = threading.Event()
+        threading.Thread(target=lambda: (s.detach(), done.set()), daemon=True).start()
+        assert done.wait(3), "detach() blocked — sendall is holding the session lock"
+        assert not s.attached
+    finally:
+        release.set()
+        with s._lock:
+            fd, s.master_fd = s.master_fd, None
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        proc.kill()
