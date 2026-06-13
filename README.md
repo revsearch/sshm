@@ -101,11 +101,11 @@ directives in `~/.ssh/config`, so any SSH client sees them. Direction is `-L` /
 `-R` / `-D`, same as `ssh`:
 
 ```bash
-sshm po a, port add <alias> -L <local>:<host>:<remote>     # Local forward
-sshm po a, port add <alias> -R <remote>:<host>:<local>     # Reverse forward
-sshm po a, port add <alias> -D <port>                      # SOCKS proxy (ssh -D)
-sshm po r, port remove <alias> -L <local>:<host>:<remote>  # Remove a forward
-sshm po r, port remove <alias> -D <port>                   # Remove a SOCKS proxy
+sshm p a, port add <alias> -L <local>:<host>:<remote>      # Local forward
+sshm p a, port add <alias> -R <remote>:<host>:<local>      # Reverse forward
+sshm p a, port add <alias> -D <port>                       # SOCKS proxy (ssh -D)
+sshm p r, port remove <alias> -L <local>:<host>:<remote>   # Remove a forward
+sshm p r, port remove <alias> -D <port>                    # Remove a SOCKS proxy
 ```
 
 `-D <port>` is a dynamic forward — a SOCKS5 proxy on `127.0.0.1:<port>` tunnelled
